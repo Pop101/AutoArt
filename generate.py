@@ -5,7 +5,7 @@ import glob
 from cv_utils import *
 import numpy as np
 
-PIXABAY_KEY = open('./pixabay_key','r').read()
+PIXABAY_KEY = open('./pixabay_key.txt','r').read()
 assert '<KEY>' not in PIXABAY_KEY, "Please add your pixabay key. Get one here: https://pixabay.com/accounts/login/?next=/api/docs/"
 
 def glob_images(dir='./'):
@@ -56,7 +56,7 @@ def apply_style(image, style, is_url, verbose=True, retries=10, use_proxies=True
 
     # Pick a proxy to use api for free (yeah it's cheap)
     proxy_req = requests.get('https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=elite&simplified=true')
-    proxies = [str(x).strip() for x in (random.choices(proxy_req.text.split('\n'), retries) if retries < len(proxy_req.text.split('\n')) else proxy_req.text.split('\n'))]
+    proxies = [str(x).strip() for x in (random.choices(proxy_req.text.split('\n'), k=retries) if retries < len(proxy_req.text.split('\n')) else proxy_req.text.split('\n'))]
     if len(set_proxy) > 0: proxies[0] = set_proxy
 
     # Construct api request
@@ -180,7 +180,7 @@ def generate_image(query, overlays=20, verbose=True, retries=10, intermediate_up
 if __name__ == '__main__':
     generate_image(input('Prompt: '), overlays=int(input('Number of Stickers: ')))
 
-    cv2.imshow('Prompt', cv2.imload('./Output/raw.png'))
-    cv2.imshow('Stickered', cv2.imload('./Output/processed.png'))
-    cv2.imshow('Generated', cv2.imload('./Output/final.png'))
+    cv2.imshow('Prompt', cv2.imread('./Output/raw.png'))
+    cv2.imshow('Stickered', cv2.imread('./Output/processed.png'))
+    cv2.imshow('Generated', cv2.imread('./Output/final.png'))
     cv2.waitKey(0)
