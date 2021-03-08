@@ -27,17 +27,17 @@ def apply_random_stickers(img, dir, num=1):
         img = overlay_transparent(img, sticker, x=x, y=y)
     return img
 
-def apply_style(image, style, is_url, verbose=True, retries=10, use_proxies=True, set_proxy=''):
+def apply_style(image:str, style:str, is_url:bool, verbose:bool=True, retries:int=10, use_proxies:bool=True, set_proxy:str=''):
     """
     Transfers the style from one image onto another using deepai.org's service
     Parameters
     ----------
-    image : np.array or str
-        The opencv image or url that will be modified
-    style : np.array or str
-        The opencv image or url that will be applied
+    image : str
+        The path to or url to the image that will be modified
+    style : str
+        The path to or url to the image that will be used as a style
     is_url : bool
-        If the image and style should be interpreted as a url or as an opencv image
+        If the image and style should be interpreted as a url or as a path
     verbose : bool
         If the function should print information as it runs
     retries : int
@@ -75,7 +75,7 @@ def apply_style(image, style, is_url, verbose=True, retries=10, use_proxies=True
     # Print the arguments (but not file binary)
     if verbose:
         if not is_url:
-            override_dict = {'files': {'content': 'Binary for ./Output/processed.png', 'style': f'Binary for {style}'}}
+            override_dict = {'files': {'content': f'Binary for {image}', 'style': f'Binary for {style}'}}
             print('Request arguements:', {**api_req_kwargs, **override_dict})
         else: print('Request arguements:', api_req_kwargs)
 
@@ -109,7 +109,85 @@ def apply_style(image, style, is_url, verbose=True, retries=10, use_proxies=True
     if url == None: raise Exception('Error Applying Style with all proxies')
     return url, proxy
 
-def generate_image(query, overlays=20, verbose=True, retries=10, intermediate_uploads=True):
+def ai_upscale(image:str, is_url:bool, verbose:bool=True, retries:int=10, use_proxies:bool=True, set_proxy:str=''):
+    """
+    Transfers the style from one image onto another using deepai.org's service
+    Parameters
+    ----------
+    image : str
+        The path to or url to the image that will be modified
+    is_url : bool
+        If the image and style should be interpreted as a url or as a path
+    verbose : bool
+        If the function should print information as it runs
+    retries : int
+        How many times it should retry with different proxies
+    use_proxies : bool
+        If the method should use proxies. Recommended, as deepai blocks multiple requests from a single ip
+    set_proxy : str
+        If set, will attempt this proxy first before other proxies
+    Returns
+    ----------
+    str
+        The URL of the image with the style applied
+    str
+        The proxy used
+    """
+
+    # Pick a proxy to use api for free (yeah it's cheap)
+    proxy_req = requests.get('https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=elite&simplified=true')
+    proxies = [str(x).strip() for x in (random.choices(proxy_req.text.split('\n'), k=retries) if retries < len(proxy_req.text.split('\n')) else proxy_req.text.split('\n'))]
+    if len(set_proxy) > 0: proxies[0] = set_proxy
+
+    # Construct api request
+    api_req_kwargs = {'headers': {'api-key': 'quickstart-QUdJIGlzIGNvbWluZy4uLi4K'}}
+    if is_url:
+        api_req_kwargs['data'] = {
+            'image': image
+        }
+    else:
+        api_req_kwargs['files'] = {
+            'image': open(image, 'rb').read(),
+        }
+    
+    # Print the arguments (but not file binary)
+    if verbose:
+        if not is_url:
+            override_dict = {'files': {'image': f'Binary for {image}'}}
+            print('Request arguements:', {**api_req_kwargs, **override_dict})
+        else: print('Request arguements:', api_req_kwargs)
+
+    # Retry request with many proxies until retries or success
+    i, url = 0, None
+    while url == None and i < retries:
+        proxy = proxies[i]
+        try:
+            # Apply proxy
+            api_req_kwargs['proxies'] = {
+                'http': proxy,
+                'https': proxy
+            }
+            
+            # Send request
+            req = requests.post("https://api.deepai.org/api/torch-srgan", **api_req_kwargs)
+
+            # Attempt parse
+            if verbose: print('Response:', req.json())
+            if 'output_url' in req.json(): url = req.json()['output_url']
+        except (urllib3.exceptions.NewConnectionError, 
+                urllib3.exceptions.MaxRetryError,
+                requests.exceptions.ProxyError,
+                requests.exceptions.SSLError):
+            if verbose: print('Error with proxy', proxy)
+        finally:
+            i += 1
+    
+    if verbose: print('Success with proxy', proxy)
+    del api_req_kwargs # Just in case (don't want to keep files in memory under any circumstance)
+    if url == None: raise Exception('Error Applying Style with all proxies')
+    return url, proxy
+
+def generate_image(query, overlays:int=20, verbose:bool=False, retries:int=10, upscale:bool=True, intermediate_uploads:bool=False):
     """
     Searches for an image by query, puts overlays on it, and applies a random style to generate art
     Parameters
@@ -122,6 +200,8 @@ def generate_image(query, overlays=20, verbose=True, retries=10, intermediate_up
         If the function should print information as it runs
     retries : int
         How many times it should retry with different proxies
+    upscale : bool
+        If the resulting image should be upscaled using another deepai api
     intermediate_uploads : bool
         If intermediate images should be uploaded to transfer.sh (may speed up multiple proxy retries, but more detectable)
     Returns
@@ -174,11 +254,21 @@ def generate_image(query, overlays=20, verbose=True, retries=10, intermediate_up
         retries
     )
 
-    styled_img = cv_img_from_url(url)
-    cv2.imwrite('./Output/final.png', styled_img)
+    if upscale:
+        url = ai_upscale(url, True, verbose=verbose, retries=retries, set_proxy=proxy)[0]
+
+    return url
 
 if __name__ == '__main__':
-    generate_image(input('Prompt: '), overlays=int(input('Number of Stickers: ')))
+    img_url = generate_image(
+        input('Prompt: '),
+        overlays = int(input('Number of Stickers: ')),
+        upscale = 'y' in input('Upscale image? (not recommended) (y/n): ').lower(),
+        intermediate_uploads = 'y' in input('Upload to transfer.sh first (recommended)? (y/n): ').lower(),
+        verbose = True,
+        retries = 50
+    )
+    cv2.imwrite('./Output/final.png', cv_img_from_url(img_url))
 
     cv2.imshow('Prompt', cv2.imread('./Output/raw.png'))
     cv2.imshow('Stickered', cv2.imread('./Output/processed.png'))
