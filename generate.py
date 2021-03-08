@@ -53,7 +53,8 @@ def apply_style(image:str, style:str, is_url:bool, verbose:bool=True, retries:in
     str
         The proxy used
     """
-
+    retries = min(max(retries, 1), 99)
+    
     # Pick a proxy to use api for free (yeah it's cheap)
     proxy_req = requests.get('https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=elite&simplified=true')
     proxies = [str(x).strip() for x in (random.choices(proxy_req.text.split('\n'), k=retries) if retries < len(proxy_req.text.split('\n')) else proxy_req.text.split('\n'))]
@@ -133,6 +134,7 @@ def ai_upscale(image:str, is_url:bool, verbose:bool=True, retries:int=10, use_pr
     str
         The proxy used
     """
+    retries = min(max(retries, 1), 99)
 
     # Pick a proxy to use api for free (yeah it's cheap)
     proxy_req = requests.get('https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=elite&simplified=true')
@@ -209,6 +211,7 @@ def generate_image(query, overlays:int=20, verbose:bool=False, retries:int=10, u
     str
         The URL of the image with the style applied
     """
+    retries = min(max(retries, 1), 99)
 
     # Grab image from query
     img = cv_img_from_query(query, PIXABAY_KEY)
